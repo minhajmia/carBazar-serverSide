@@ -32,13 +32,22 @@ async function run() {
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
 
-    /* 3.  Users Post */
+    /* 4.  GET BUYER BOOKINGS */
+    app.get("/bookings", async (req, res) => {
+      const query = {};
+      const bookings = await bookingsCollection.find(query).toArray();
+      res.send(bookings);
+    });
+
+    /* 3.  USERS POST */
     app.post("/users", async (req, res) => {
       const user = req.body;
+      console.log(user);
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
-    /* 3.  Booking PRODUCTS */
+
+    /* 3.   BOOKING PRODUCTS */
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
       const query = {
