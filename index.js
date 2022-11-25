@@ -32,6 +32,15 @@ async function run() {
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
 
+    /* 5.  GET ALL SELLER  */
+    app.get("/users/sellers", async (req, res) => {
+      const query = {};
+      const allUsers = await usersCollection.find(query).toArray();
+      if (allUsers.length) {
+        const sellers = allUsers.filter((user) => user.role !== "buyer");
+        return res.send(sellers);
+      }
+    });
     /* 4.  GET ALL BUYER  */
     app.get("/users/buyers", async (req, res) => {
       const query = {};
