@@ -32,6 +32,14 @@ async function run() {
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
 
+    /* 5.  Delete  SELLER  */
+    /* 5.  Delete Buyer  */
+    app.delete("/buyer/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    });
     /* 5.  GET ALL SELLER  */
     app.get("/users/sellers", async (req, res) => {
       const query = {};
