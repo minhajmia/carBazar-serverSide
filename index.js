@@ -30,7 +30,14 @@ async function run() {
       .db("carBazarDB")
       .collection("products");
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
+    const usersCollection = client.db("carBazarDB").collection("users");
 
+    /* 3.  Users Post */
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
     /* 3.  Booking PRODUCTS */
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
