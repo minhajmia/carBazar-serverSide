@@ -32,6 +32,14 @@ async function run() {
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
 
+    /* 5.  Add   PRODUCT */
+    app.post("/addProduct", async (req, res) => {
+      const product = req.body;
+      console.log(req.body);
+      const result = await categoriesProductsCollection.insertOne(product);
+      res.send(result);
+    });
+
     /* 5.  VERIFY  SELLER  */
     app.put("/seller/verify/:id", async (req, res) => {
       const id = req.params.id;
@@ -85,7 +93,8 @@ async function run() {
 
     /* 4.  GET BUYER BOOKINGS */
     app.get("/bookings", async (req, res) => {
-      const query = {};
+      const email = req.query.email;
+      const query = { email };
       const bookings = await bookingsCollection.find(query).toArray();
       res.send(bookings);
     });
@@ -116,7 +125,7 @@ async function run() {
     /* 2.  LOAD ALL PRODUCTS */
     app.get("/products/:id", async (req, res) => {
       const id = req.params.id;
-      const query = { category_id: id };
+      const query = { category: id };
       const products = await categoriesProductsCollection.find(query).toArray();
       res.send(products);
     });
