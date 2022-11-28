@@ -21,6 +21,21 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
+/* VERIFY TOKEN */
+function verifyJWT(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send("Unauthorized Access");
+  }
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+    if (err) {
+      return res.status(403).send({ message: "Forbidden Access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+}
 async function run() {
   try {
     const categoriesNameCollection = client
@@ -32,18 +47,98 @@ async function run() {
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
 
-    /* 5.  Add   PRODUCT */
-    app.post("/addProduct", async (req, res) => {
+    /*14. JWT TOKEN */
+    app.get("/jwt", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      if (user) {
+        const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, {
+          expiresIn: "1h",
+        });
+        return res.send({ accessToken: token });
+      }
+      res.status(403).send({ accessToken: " " });
+    });
+
+    /* 13.  CHECK USER FOR TOKEN */
+    app.get("/users", async (req, res) => {
+      const email = req.query.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      console.log(result);
+      res.send(result);
+    });
+    /* 12.  ADVERTISE  SELLER UPLOAD PRODUCT */
+    app.put("/product/advertise/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: ObjectId(id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          isAdvertisement: "advertised",
+        },
+      };
+      const result = await categoriesProductsCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+    /* 11.    DELETE  SELLER UPLOAD PRODUCT */
+    app.delete("/sellerProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await categoriesProductsCollection.deleteOne(query);
+      res.send(result);
+    });
+    /* 10.  CHECK AS A  Admin */
+    app.get("/users/admin/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ isAdmin: user?.role === "admin" });
+    });
+
+    /* 10.  CHECK AS A  SELLER */
+    app.get("/users/seller/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ isSeller: user?.role === "seller" });
+    });
+    /* 10.  LOAD  SELLER ALL  PRODUCT */
+    app.get("/sellerProducts", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded.email;
+      const email = req.query.email;
+      const query = { email: decodedEmail };
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== "seller") {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+      const sellerProducts = await categoriesProductsCollection
+        .find(query)
+        .toArray();
+      res.send(sellerProducts);
+    });
+
+    /* 9.  Add   PRODUCT */
+    app.post("/addProduct", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded.email;
+      const query = { email: decodedEmail };
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== "seller") {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
       const product = req.body;
-      console.log(req.body);
       const result = await categoriesProductsCollection.insertOne(product);
       res.send(result);
     });
 
-    /* 5.  VERIFY  SELLER  */
+    /* 8.  VERIFY  SELLER  */
     app.put("/seller/verify/:id", async (req, res) => {
       const id = req.params.id;
-      console.log(id);
       const filter = { _id: ObjectId(id) };
       const options = { upsert: true };
       const updateDoc = {
@@ -58,22 +153,29 @@ async function run() {
       );
       res.send(result);
     });
-    /* 5.  DELETE  SELLER  */
+    /* 7.  DELETE  SELLER  */
     app.delete("/seller/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
       res.send(result);
     });
-    /* 5.  DELETE BUYER  */
+    /* 6.  DELETE BUYER  */
     app.delete("/buyer/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
       res.send(result);
     });
+
     /* 5.  GET ALL SELLER  */
-    app.get("/users/sellers", async (req, res) => {
+    app.get("/users/sellers", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded.email;
+      const filter = { email: decodedEmail };
+      const user = await usersCollection.findOne(filter);
+      if (user?.role !== "admin") {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
       const query = {};
       const allUsers = await usersCollection.find(query).toArray();
       if (allUsers.length) {
@@ -92,8 +194,12 @@ async function run() {
     });
 
     /* 4.  GET BUYER BOOKINGS */
-    app.get("/bookings", async (req, res) => {
+    app.get("/bookings", verifyJWT, async (req, res) => {
       const email = req.query.email;
+      const decodeEmail = req.decoded.email;
+      if (email !== decodeEmail) {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
       const query = { email };
       const bookings = await bookingsCollection.find(query).toArray();
       res.send(bookings);
