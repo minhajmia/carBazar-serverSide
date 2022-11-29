@@ -4,6 +4,8 @@ require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const bodyParser = require("body-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+console.log(stripe);
 const app = express();
 
 const port = process.env.PORT || 5000;
@@ -47,21 +49,62 @@ async function run() {
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
 
-    /*14. JWT TOKEN */
+    /* STRIPE PAYMENT  */
+    app.post("/create-payment-intent", async (req, res) => {
+      const booking = req.body;
+      const price = parseInt(booking.price);
+      const amount = price * 100;
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        currency: "usd",
+        amount: amount,
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    /*1JWT TOKEN */
     app.get("/jwt", async (req, res) => {
       const email = req.query.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       if (user) {
         const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, {
-          expiresIn: "1h",
+          expiresIn: "14d",
         });
         return res.send({ accessToken: token });
       }
       res.status(403).send({ accessToken: " " });
     });
 
-    /* 13.  CHECK USER FOR TOKEN */
+    /*   GOOGLE SIGN IN AS A BUYER */
+    app.put("/users/googleLogin", async (req, res) => {
+      const email = req.query.email;
+      const name = req.query.name;
+      const query = { email: email, name: name };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          name: name,
+          email: email,
+          role: "buyer",
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc, options);
+      res.send(result);
+    });
+
+    /*   BOOKING PAYMENT */
+    app.get("/bookings/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const booking = await bookingsCollection.findOne(query);
+      res.send(booking);
+    });
+
+    /*   CHECK USER FOR TOKEN */
     app.get("/users", async (req, res) => {
       const email = req.query.email;
       const query = { email };
@@ -69,7 +112,7 @@ async function run() {
       console.log(result);
       res.send(result);
     });
-    /* 12.  ADVERTISE  SELLER UPLOAD PRODUCT */
+    /*   ADVERTISE  SELLER UPLOAD PRODUCT */
     app.put("/product/advertise/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { _id: ObjectId(id) };
@@ -86,14 +129,14 @@ async function run() {
       );
       res.send(result);
     });
-    /* 11.    DELETE  SELLER UPLOAD PRODUCT */
+    /*     DELETE  SELLER UPLOAD PRODUCT */
     app.delete("/sellerProduct/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
       const result = await categoriesProductsCollection.deleteOne(query);
       res.send(result);
     });
-    /* 10.  CHECK AS A  Admin */
+    /*   CHECK AS A  Admin */
     app.get("/users/admin/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email };
@@ -101,14 +144,14 @@ async function run() {
       res.send({ isAdmin: user?.role === "admin" });
     });
 
-    /* 10.  CHECK AS A  SELLER */
+    /*   CHECK AS A  SELLER */
     app.get("/users/seller/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ isSeller: user?.role === "seller" });
     });
-    /* 10.  LOAD  SELLER ALL  PRODUCT */
+    /*   LOAD  SELLER ALL  PRODUCT */
     app.get("/sellerProducts", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded.email;
       const email = req.query.email;
@@ -123,7 +166,7 @@ async function run() {
       res.send(sellerProducts);
     });
 
-    /* 9.  Add   PRODUCT */
+    /*  Add   PRODUCT */
     app.post("/addProduct", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded.email;
       const query = { email: decodedEmail };
@@ -136,7 +179,7 @@ async function run() {
       res.send(result);
     });
 
-    /* 8.  VERIFY  SELLER  */
+    /*  VERIFY  SELLER  */
     app.put("/seller/verify/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { _id: ObjectId(id) };
@@ -153,14 +196,14 @@ async function run() {
       );
       res.send(result);
     });
-    /* 7.  DELETE  SELLER  */
+    /*  DELETE  SELLER  */
     app.delete("/seller/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
       res.send(result);
     });
-    /* 6.  DELETE BUYER  */
+    /*  DELETE BUYER  */
     app.delete("/buyer/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
@@ -168,7 +211,14 @@ async function run() {
       res.send(result);
     });
 
-    /* 5.  GET ALL SELLER  */
+    /*  CHECK VERIFIED SELLER  */
+    app.get("/users/sellers/verify/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      res.send(user);
+    });
+    /*  GET ALL SELLER  */
     app.get("/users/sellers", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded.email;
       const filter = { email: decodedEmail };
@@ -183,7 +233,7 @@ async function run() {
         return res.send(sellers);
       }
     });
-    /* 4.  GET ALL BUYER  */
+    /*  GET ALL BUYER  */
     app.get("/users/buyers", async (req, res) => {
       const query = {};
       const allUsers = await usersCollection.find(query).toArray();
@@ -193,11 +243,21 @@ async function run() {
       }
     });
 
-    /* 4.  GET BUYER BOOKINGS */
+    /*  CHECK AS A BUYER */
+    app.get("/users/buyer/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ isBuyer: user?.role === "buyer" });
+    });
+
+    /*  GET BUYER BOOKINGS */
     app.get("/bookings", verifyJWT, async (req, res) => {
-      const email = req.query.email;
       const decodeEmail = req.decoded.email;
-      if (email !== decodeEmail) {
+      const email = req.query.email;
+      const filter = { email: decodeEmail };
+      const user = await usersCollection.findOne(filter);
+      if (user?.role !== "buyer") {
         return res.status(403).send({ message: "Forbidden Access" });
       }
       const query = { email };
@@ -205,14 +265,14 @@ async function run() {
       res.send(bookings);
     });
 
-    /* 3.  USERS POST */
+    /*  USERS POST */
     app.post("/users", async (req, res) => {
       const user = req.body;
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
 
-    /* 3.   BOOKING PRODUCTS */
+    /*   BOOKING PRODUCTS */
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
       const query = {
@@ -228,7 +288,7 @@ async function run() {
       res.send(result);
     });
 
-    /* 2.  LOAD ALL PRODUCTS */
+    /*  LOAD ALL PRODUCTS */
     app.get("/products/:id", async (req, res) => {
       const id = req.params.id;
       const query = { category: id };
@@ -236,7 +296,7 @@ async function run() {
       res.send(products);
     });
 
-    /* 1.  LOAD ALL CATEGORIES */
+    /*  LOAD ALL CATEGORIES */
     app.get("/categories", async (req, res) => {
       const query = {};
       const categories = await categoriesNameCollection.find(query).toArray();
