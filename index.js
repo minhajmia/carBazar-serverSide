@@ -48,6 +48,9 @@ async function run() {
       .collection("products");
     const bookingsCollection = client.db("carBazarDB").collection("bookings");
     const usersCollection = client.db("carBazarDB").collection("users");
+    const paymentProductsCollection = client
+      .db("carBazarDB")
+      .collection("paymentProducts");
 
     /* STRIPE PAYMENT  */
     app.post("/create-payment-intent", async (req, res) => {
@@ -79,6 +82,33 @@ async function run() {
       res.status(403).send({ accessToken: " " });
     });
 
+    app.get("/payment", async (req, res) => {
+      const email = req.query.email;
+      const query = { email };
+      const result = await paymentProductsCollection.find(query);
+      console.log(result);
+      res.send(result);
+    });
+
+    /*   PAYMENT FOR BOOKING */
+    app.put("/booking/payment/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          isPaid: true,
+        },
+      };
+      const result = await bookingsCollection.updateOne(
+        query,
+        updateDoc,
+        options
+      );
+      console.log(result);
+      res.send(result);
+    });
+
     /*   GOOGLE SIGN IN AS A BUYER */
     app.put("/users/googleLogin", async (req, res) => {
       const email = req.query.email;
@@ -94,6 +124,13 @@ async function run() {
       };
       const result = await usersCollection.updateOne(query, updateDoc, options);
       res.send(result);
+    });
+
+    /*   ALL PRODUCTS */
+    app.get("/products", async (req, res) => {
+      const query = {};
+      const products = await categoriesProductsCollection.find(query).toArray();
+      res.send(products);
     });
 
     /*   BOOKING PAYMENT */
@@ -115,20 +152,21 @@ async function run() {
     /*   ADVERTISE  SELLER UPLOAD PRODUCT */
     app.put("/product/advertise/:id", async (req, res) => {
       const id = req.params.id;
-      const filter = { _id: ObjectId(id) };
+      const query = { _id: ObjectId(id) };
       const options = { upsert: true };
       const updateDoc = {
         $set: {
-          isAdvertisement: "advertised",
+          isAdvertise: "advertised",
         },
       };
-      const result = await categoriesProductsCollection.updateOne(
-        filter,
+      const product = await categoriesProductsCollection.updateOne(
+        query,
         updateDoc,
         options
       );
-      res.send(result);
+      res.send(product);
     });
+
     /*     DELETE  SELLER UPLOAD PRODUCT */
     app.delete("/sellerProduct/:id", async (req, res) => {
       const id = req.params.id;
